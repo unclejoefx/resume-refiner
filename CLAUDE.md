@@ -8,12 +8,75 @@ Resume Refiner is a tool for improving and refining resumes.
 
 ## Project Status
 
-This is a newly initialized repository. The codebase structure and architecture are not yet established.
+**Phase 1 (Foundation) - COMPLETED ✅**
+
+The project structure has been established with:
+- Backend API using FastAPI
+- Frontend application using React + TypeScript + Vite
+- File upload functionality
+- Basic UI components for resume analysis
+- API endpoints for upload, analysis, and export
+
+**Next Steps**: Phase 2 - Document Processing (implement PDF/DOCX parsers)
 
 ## Development Commands
 
-To be added once the project structure is established.
+### Backend
+
+```bash
+# Setup
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Run development server
+uvicorn app.main:app --reload --port 8000
+
+# Run tests
+pytest
+
+# Code formatting
+black app/
+flake8 app/
+```
+
+### Frontend
+
+```bash
+# Setup
+cd frontend
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Lint code
+npm run lint
+```
 
 ## Architecture
 
-To be documented as the codebase develops.
+### Backend Structure
+- **FastAPI** application with modular architecture
+- **Models**: Pydantic models for data validation
+- **Services**: Business logic layer (parser, Claude API, grammar checker, ATS optimizer, formatter)
+- **Routers**: API endpoints (upload, analyze, export)
+- **Utils**: Helper functions for file handling
+
+### Frontend Structure
+- **React** with TypeScript for type safety
+- **Components**: Reusable UI components (UploadSection, AnalysisResults, ScoreDisplay, SuggestionCard)
+- **Pages**: Main application pages (Home)
+- **Services**: API client using Axios
+- **Types**: TypeScript interfaces matching backend models
+
+### API Flow
+1. User uploads resume → POST /api/upload/
+2. Backend parses document → Returns upload object with parsed content
+3. Frontend requests analysis → POST /api/analyze/
+4. Backend runs grammar check, ATS analysis, AI suggestions → Returns analysis results
+5. User views results and can export → GET /api/export/{id}/pdf or /docx
