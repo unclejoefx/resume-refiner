@@ -1,0 +1,310 @@
+"""Document parsing service."""
+
+import re
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+import pdfplumber
+from docx import Document
+from app.models.resume import (
+    ResumeContent,
+    ContactInfo,
+    Experience,
+    Education,
+    Skill
+)
+
+
+class DocumentParser:
+    """Document parser for PDF and DOCX files."""
+
+    # Common section headers
+    SECTION_HEADERS = {
+        'experience': ['experience', 'work experience', 'employment', 'work history', 'professional experience'],
+        'education': ['education', 'academic background', 'academic history'],
+        'skills': ['skills', 'technical skills', 'core competencies', 'competencies'],
+        'summary': ['summary', 'professional summary', 'profile', 'objective', 'about me'],
+    }
+
+    @staticmethod
+    def parse_pdf(file_path: str) -> ResumeContent:
+        """
+        Parse PDF file and extract content.
+
+        Args:
+            file_path: Path to PDF file
+
+        Returns:
+            ResumeContent object with extracted data
+        """
+        try:
+            with pdfplumber.open(file_path) as pdf:
+                # Extract text from all pages
+                raw_text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        raw_text += page_text + "\n"
+
+                if not raw_text.strip():
+                    return ResumeContent(raw_text="Unable to extract text from PDF")
+
+                # Parse the extracted text
+                contact_info = DocumentParser._extract_contact_info(raw_text)
+                summary = DocumentParser._extract_summary(raw_text)
+                experience = DocumentParser._extract_experience(raw_text)
+                education = DocumentParser._extract_education(raw_text)
+                skills = DocumentParser._extract_skills(raw_text)
+
+                return ResumeContent(
+                    contact_info=contact_info,
+                    summary=summary,
+                    experience=experience,
+                    education=education,
+                    skills=skills,
+                    raw_text=raw_text,
+                    sections=DocumentParser._identify_sections(raw_text)
+                )
+
+        except Exception as e:
+            return ResumeContent(
+                raw_text=f"Error parsing PDF: {str(e)}"
+            )
+
+    @staticmethod
+    def parse_docx(file_path: str) -> ResumeContent:
+        """
+        Parse DOCX file and extract content.
+
+        Args:
+            file_path: Path to DOCX file
+
+        Returns:
+            ResumeContent object with extracted data
+        """
+        try:
+            doc = Document(file_path)
+
+            # Extract text from all paragraphs
+            raw_text = ""
+            for paragraph in doc.paragraphs:
+                raw_text += paragraph.text + "\n"
+
+            # Also extract text from tables (resumes often use tables)
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        raw_text += cell.text + "\n"
+
+            if not raw_text.strip():
+                return ResumeContent(raw_text="Unable to extract text from DOCX")
+
+            # Parse the extracted text
+            contact_info = DocumentParser._extract_contact_info(raw_text)
+            summary = DocumentParser._extract_summary(raw_text)
+            experience = DocumentParser._extract_experience(raw_text)
+            education = DocumentParser._extract_education(raw_text)
+            skills = DocumentParser._extract_skills(raw_text)
+
+            return ResumeContent(
+                contact_info=contact_info,
+                summary=summary,
+                experience=experience,
+                education=education,
+                skills=skills,
+                raw_text=raw_text,
+                sections=DocumentParser._identify_sections(raw_text)
+            )
+
+        except Exception as e:
+            return ResumeContent(
+                raw_text=f"Error parsing DOCX: {str(e)}"
+            )
+
+    @classmethod
+    def parse(cls, file_path: str, file_type: str) -> ResumeContent:
+        """
+        Parse document based on file type.
+
+        Args:
+            file_path: Path to document file
+            file_type: File type (pdf or docx)
+
+        Returns:
+            ResumeContent object with extracted data
+
+        Raises:
+            ValueError: If file type is not supported
+        """
+        if file_type == "pdf":
+            return cls.parse_pdf(file_path)
+        elif file_type == "docx":
+            return cls.parse_docx(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {file_type}")
+
+    @staticmethod
+    def _extract_contact_info(text: str) -> Optional[ContactInfo]:
+        """Extract contact information from text."""
+        contact = ContactInfo()
+
+        # Extract email
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        email_match = re.search(email_pattern, text)
+        if email_match:
+            contact.email = email_match.group(0)
+
+        # Extract phone number (various formats)
+        phone_pattern = r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
+        phone_match = re.search(phone_pattern, text)
+        if phone_match:
+            contact.phone = phone_match.group(0)
+
+        # Extract LinkedIn URL
+        linkedin_pattern = r'linkedin\.com/in/[\w-]+'
+        linkedin_match = re.search(linkedin_pattern, text, re.IGNORECASE)
+        if linkedin_match:
+            contact.linkedin = linkedin_match.group(0)
+
+        # Extract name (assume first non-empty line or line before contact info)
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        if lines:
+            # First line is often the name
+            contact.name = lines[0]
+
+        return contact if any([contact.email, contact.phone, contact.name]) else None
+
+    @staticmethod
+    def _extract_summary(text: str) -> Optional[str]:
+        """Extract professional summary from text."""
+        # Look for summary section
+        for header in DocumentParser.SECTION_HEADERS['summary']:
+            pattern = rf'{header}\s*[:\-]?\s*\n(.*?)(?=\n\n|\n[A-Z]{{2,}}|\Z)'
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+            if match:
+                summary = match.group(1).strip()
+                # Clean up and limit length
+                summary = ' '.join(summary.split())
+                if len(summary) > 50:  # Minimum length for a summary
+                    return summary[:1000]  # Max 1000 chars
+
+        return None
+
+    @staticmethod
+    def _extract_experience(text: str) -> List[Experience]:
+        """Extract work experience from text."""
+        experiences = []
+
+        # Find experience section
+        for header in DocumentParser.SECTION_HEADERS['experience']:
+            # Look for section header
+            pattern = rf'(?:^|\n)({header})\s*[:\-]?\s*\n(.*?)(?=\n(?:{"?|".join(DocumentParser.SECTION_HEADERS["education"] + DocumentParser.SECTION_HEADERS["skills"])})\s*[:\-]?|\Z)'
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+
+            if match:
+                experience_text = match.group(2)
+                # Split into individual experiences (basic heuristic)
+                # Look for patterns like "Company Name" followed by dates
+                date_pattern = r'\b((?:19|20)\d{2})\b'
+
+                # For now, create a single experience entry with the full text
+                # A more sophisticated parser could split this into multiple entries
+                if experience_text.strip():
+                    exp = Experience(
+                        company="Various",  # Placeholder
+                        position="See details",
+                        description=experience_text.strip()[:500],  # Limit length
+                        bullets=[]
+                    )
+                    experiences.append(exp)
+                break
+
+        return experiences
+
+    @staticmethod
+    def _extract_education(text: str) -> List[Education]:
+        """Extract education from text."""
+        education_list = []
+
+        # Find education section
+        for header in DocumentParser.SECTION_HEADERS['education']:
+            pattern = rf'(?:^|\n)({header})\s*[:\-]?\s*\n(.*?)(?=\n(?:{"?|".join(DocumentParser.SECTION_HEADERS["skills"] + ["experience"])})\s*[:\-]?|\Z)'
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+
+            if match:
+                education_text = match.group(2).strip()
+
+                # Look for degree patterns
+                degree_patterns = [
+                    r"(Bachelor|Master|PhD|Ph\.D\.|B\.S\.|M\.S\.|B\.A\.|M\.A\.)[^\n]*",
+                    r"(University|College|Institute)[^\n]*"
+                ]
+
+                for pattern in degree_patterns:
+                    matches = re.finditer(pattern, education_text, re.IGNORECASE)
+                    for match in matches:
+                        edu = Education(
+                            institution=match.group(0).strip()[:200],
+                            degree="",
+                            achievements=[]
+                        )
+                        education_list.append(edu)
+                        break  # Just get first match for now
+
+                # If no specific matches, create generic entry
+                if not education_list and education_text:
+                    edu = Education(
+                        institution=education_text[:200],
+                        degree="",
+                        achievements=[]
+                    )
+                    education_list.append(edu)
+                break
+
+        return education_list
+
+    @staticmethod
+    def _extract_skills(text: str) -> List[Skill]:
+        """Extract skills from text."""
+        skills_list = []
+
+        # Find skills section
+        for header in DocumentParser.SECTION_HEADERS['skills']:
+            pattern = rf'(?:^|\n)({header})\s*[:\-]?\s*\n(.*?)(?=\n[A-Z][A-Za-z\s]{{2,}}[:\-]|\Z)'
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+
+            if match:
+                skills_text = match.group(2).strip()
+
+                # Split by common delimiters
+                skill_items = re.split(r'[,;•·\n]+', skills_text)
+                skill_items = [s.strip() for s in skill_items if s.strip() and len(s.strip()) > 2]
+
+                if skill_items:
+                    skill = Skill(
+                        category="Technical Skills",
+                        skills=skill_items[:20]  # Limit to 20 skills
+                    )
+                    skills_list.append(skill)
+                break
+
+        return skills_list
+
+    @staticmethod
+    def _identify_sections(text: str) -> Dict[str, Any]:
+        """Identify all sections in the document."""
+        sections = {}
+
+        # Find all section headers
+        for section_type, headers in DocumentParser.SECTION_HEADERS.items():
+            for header in headers:
+                pattern = rf'(?:^|\n)({header})\s*[:\-]?'
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    sections[section_type] = {
+                        'found': True,
+                        'position': match.start(),
+                        'header': match.group(1)
+                    }
+                    break
+
+        return sections

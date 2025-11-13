@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { UploadSection } from '../components/UploadSection';
 import { AnalysisResults } from '../components/AnalysisResults';
+import { DocumentPreview } from '../components/DocumentPreview';
 import { ResumeUpload, Analysis } from '../types/resume';
 import { analyzeResume } from '../services/api';
 
@@ -14,14 +15,19 @@ export const Home: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleUploadComplete = async (uploadData: ResumeUpload) => {
+  const handleUploadComplete = (uploadData: ResumeUpload) => {
     setUpload(uploadData);
     setError(null);
+    // Don't automatically analyze - let user review parsed content first
+  };
 
-    // Automatically start analysis
+  const handleAnalyze = async () => {
+    if (!upload) return;
+
     setAnalyzing(true);
+    setError(null);
     try {
-      const analysisResult = await analyzeResume(uploadData.id);
+      const analysisResult = await analyzeResume(upload.id);
       setAnalysis(analysisResult);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to analyze resume');
@@ -47,10 +53,23 @@ export const Home: React.FC = () => {
         <UploadSection onUploadComplete={handleUploadComplete} />
       )}
 
-      {upload && !analyzing && !analysis && (
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-          <p>Resume uploaded: {upload.filename}</p>
-          <button onClick={handleReset}>Upload Another Resume</button>
+      {upload && !analyzing && !analysis && upload.content && (
+        <div>
+          <div style={{ marginBottom: '20px' }}>
+            <h3>Upload Successful!</h3>
+            <p>File: {upload.filename}</p>
+          </div>
+
+          <DocumentPreview content={upload.content} />
+
+          <div style={{ textAlign: 'center', marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button onClick={handleAnalyze} style={{ fontSize: '16px', padding: '12px 24px' }}>
+              Analyze Resume
+            </button>
+            <button onClick={handleReset} style={{ backgroundColor: '#757575' }}>
+              Upload Another Resume
+            </button>
+          </div>
         </div>
       )}
 

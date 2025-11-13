@@ -17,7 +17,17 @@ The project structure has been established with:
 - Basic UI components for resume analysis
 - API endpoints for upload, analysis, and export
 
-**Next Steps**: Phase 2 - Document Processing (implement PDF/DOCX parsers)
+**Phase 2 (Document Processing) - COMPLETED ✅**
+
+Document parsing functionality has been implemented:
+- PDF parser using pdfplumber with text extraction
+- DOCX parser using python-docx with support for tables
+- Intelligent section detection (contact info, summary, experience, education, skills)
+- Contact information extraction (email, phone, LinkedIn, name)
+- DocumentPreview component for displaying parsed content
+- Comprehensive test suite for parser functionality
+
+**Next Steps**: Phase 3 - Grammar and Basic Analysis (implement grammar checking and scoring)
 
 ## Development Commands
 
@@ -69,10 +79,17 @@ npm run lint
 
 ### Frontend Structure
 - **React** with TypeScript for type safety
-- **Components**: Reusable UI components (UploadSection, AnalysisResults, ScoreDisplay, SuggestionCard)
+- **Components**: Reusable UI components (UploadSection, AnalysisResults, ScoreDisplay, SuggestionCard, DocumentPreview)
 - **Pages**: Main application pages (Home)
 - **Services**: API client using Axios
 - **Types**: TypeScript interfaces matching backend models
+
+### Document Parser Features
+- **PDF Support**: Extracts text from all pages using pdfplumber
+- **DOCX Support**: Parses paragraphs and tables using python-docx
+- **Section Detection**: Identifies common resume sections automatically
+- **Contact Extraction**: Regex-based extraction of emails, phone numbers, LinkedIn URLs
+- **Smart Parsing**: Attempts to structure unstructured text into meaningful sections
 
 ### API Flow
 1. User uploads resume → POST /api/upload/

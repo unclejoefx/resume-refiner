@@ -1,15 +1,31 @@
 """FastAPI application entry point."""
 
+import logging
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import upload, analyze, export
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('resume_refiner.log')
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Resume Refiner API",
     description="AI-powered resume analysis and optimization",
     version="0.1.0",
 )
+
+logger.info("Resume Refiner API starting up...")
 
 # Configure CORS
 app.add_middleware(

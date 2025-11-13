@@ -1,0 +1,163 @@
+"""Tests for document parser."""
+
+import pytest
+from app.services.parser import DocumentParser
+from app.models.resume import ResumeContent, ContactInfo
+
+
+def test_parse_unsupported_file_type():
+    """Test that unsupported file types raise ValueError."""
+    with pytest.raises(ValueError):
+        DocumentParser.parse("test.txt", "txt")
+
+
+def test_parse_pdf_returns_resume_content():
+    """Test that PDF parsing returns ResumeContent object."""
+    # This will fail gracefully with non-existent file
+    result = DocumentParser.parse_pdf("dummy.pdf")
+    assert isinstance(result, ResumeContent)
+    # Should contain error message
+    assert "Error parsing PDF" in result.raw_text
+
+
+def test_parse_docx_returns_resume_content():
+    """Test that DOCX parsing returns ResumeContent object."""
+    # This will fail gracefully with non-existent file
+    result = DocumentParser.parse_docx("dummy.docx")
+    assert isinstance(result, ResumeContent)
+    # Should contain error message
+    assert "Error parsing DOCX" in result.raw_text
+
+
+def test_extract_contact_info_with_email():
+    """Test contact info extraction with email."""
+    text = "John Doe\nEmail: john.doe@example.com\nPhone: 555-123-4567"
+    contact = DocumentParser._extract_contact_info(text)
+
+    assert contact is not None
+    assert contact.email == "john.doe@example.com"
+    assert contact.name == "John Doe"
+    assert "555-123-4567" in contact.phone
+
+
+def test_extract_contact_info_with_linkedin():
+    """Test contact info extraction with LinkedIn."""
+    text = "Jane Smith\nlinkedin.com/in/janesmith\ntest@example.com"
+    contact = DocumentParser._extract_contact_info(text)
+
+    assert contact is not None
+    assert "linkedin.com/in/janesmith" in contact.linkedin
+    assert contact.email == "test@example.com"
+
+
+def test_extract_summary():
+    """Test summary extraction."""
+    text = """
+    John Doe
+
+    Summary:
+    Experienced software engineer with 5+ years of expertise in Python and web development.
+    Passionate about building scalable applications.
+
+    Experience:
+    Some work history here
+    """
+    summary = DocumentParser._extract_summary(text)
+
+    assert summary is not None
+    assert "software engineer" in summary.lower()
+    assert len(summary) > 50
+
+
+def test_extract_skills():
+    """Test skills extraction."""
+    text = """
+    Education
+    Some education info
+
+    Skills:
+    Python, JavaScript, React, Docker, AWS, SQL
+
+    """
+    skills = DocumentParser._extract_skills(text)
+
+    assert len(skills) > 0
+    assert skills[0].category == "Technical Skills"
+    assert "Python" in skills[0].skills or "python" in str(skills[0].skills).lower()
+
+
+def test_extract_experience():
+    """Test experience extraction."""
+    text = """
+    Contact Info
+
+    Experience:
+    Software Engineer at Tech Company
+    2020 - Present
+    - Developed web applications
+    - Led team of 5 developers
+
+    Education:
+    BS Computer Science
+    """
+    experiences = DocumentParser._extract_experience(text)
+
+    assert len(experiences) > 0
+    assert experiences[0].company is not None
+
+
+def test_extract_education():
+    """Test education extraction."""
+    text = """
+    Experience:
+    Some work history
+
+    Education:
+    Bachelor of Science in Computer Science
+    University of Technology
+    2016 - 2020
+
+    Skills:
+    Programming languages
+    """
+    education = DocumentParser._extract_education(text)
+
+    assert len(education) > 0
+    assert education[0].institution is not None
+
+
+def test_identify_sections():
+    """Test section identification."""
+    text = """
+    John Doe
+
+    Summary:
+    A brief summary here
+
+    Experience:
+    Work history
+
+    Education:
+    Degree info
+
+    Skills:
+    Python, Java
+    """
+    sections = DocumentParser._identify_sections(text)
+
+    assert 'summary' in sections
+    assert 'experience' in sections
+    assert 'education' in sections
+    assert 'skills' in sections
+    assert sections['summary']['found'] is True
+
+
+def test_parse_method_routes_to_correct_parser():
+    """Test that parse method routes to correct parser based on file type."""
+    # PDF
+    result_pdf = DocumentParser.parse("test.pdf", "pdf")
+    assert isinstance(result_pdf, ResumeContent)
+
+    # DOCX
+    result_docx = DocumentParser.parse("test.docx", "docx")
+    assert isinstance(result_docx, ResumeContent)
