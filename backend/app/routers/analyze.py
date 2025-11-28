@@ -1,5 +1,6 @@
-"""Analysis endpoints."""
+"""Analysis endpoints with grammar checking and scoring."""
 
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from uuid import UUID
@@ -8,10 +9,14 @@ from app.models.analysis import Analysis, GrammarIssue, ATSSuggestion, ContentSu
 from app.services.grammar_checker import GrammarChecker
 from app.services.ats_optimizer import ATSOptimizer
 from app.services.claude_service import ClaudeService
+from app.services.scoring import ResumeScorer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # In-memory storage for demonstration
+# TODO: Replace with database
 analyses_db = {}
 
 
@@ -38,7 +43,7 @@ class ATSCheckRequest(BaseModel):
 @router.post("/", response_model=Analysis)
 async def analyze_resume(request: AnalyzeRequest):
     """
-    Perform full resume analysis.
+    Perform full resume analysis with grammar check and scoring.
 
     Args:
         request: Analysis request with resume ID and optional job description
@@ -46,16 +51,20 @@ async def analyze_resume(request: AnalyzeRequest):
     Returns:
         Complete analysis results
     """
+    logger.info(f"Starting analysis for resume ID: {request.resume_id}")
+
     # Import here to avoid circular import
     from app.routers.upload import uploads_db
 
     # Get resume
     if request.resume_id not in uploads_db:
+        logger.error(f"Resume not found: {request.resume_id}")
         raise HTTPException(status_code=404, detail="Resume not found")
 
     resume = uploads_db[request.resume_id]
 
     if not resume.content:
+        logger.error(f"Resume content not parsed: {request.resume_id}")
         raise HTTPException(status_code=400, detail="Resume content not parsed")
 
     try:
@@ -64,18 +73,39 @@ async def analyze_resume(request: AnalyzeRequest):
         ats_optimizer = ATSOptimizer()
         claude_service = ClaudeService()
 
-        # Run all analyses
+        logger.info("Running grammar check...")
+        # Run grammar check
         grammar_issues = await grammar_checker.check_grammar(resume.content.raw_text)
-        ats_score, ats_suggestions = await ats_optimizer.analyze_ats_compatibility(
+
+        logger.info("Running ATS analysis...")
+        # Run ATS analysis
+        ats_score_raw, ats_suggestions = await ats_optimizer.analyze_ats_compatibility(
             resume.content, request.job_description
         )
+
+        logger.info("Running content analysis...")
+        # Run AI content analysis (placeholder for now)
         content_suggestions = await claude_service.analyze_content(resume.content)
 
-        # Calculate scores
-        grammar_score = max(0, 100 - len(grammar_issues) * 5)
-        content_score = 85.0  # Placeholder
+        # Calculate scores using scoring service
+        logger.info("Calculating scores...")
+        grammar_score = ResumeScorer.calculate_grammar_score(
+            len(resume.content.raw_text),
+            grammar_issues
+        )
 
-        overall_score = (grammar_score + ats_score + content_score) / 3
+        content_score = ResumeScorer.calculate_content_score(resume.content)
+
+        ats_score = ResumeScorer.calculate_ats_score(
+            resume.content,
+            ats_suggestions
+        )
+
+        overall_score = ResumeScorer.calculate_overall_score(
+            grammar_score,
+            ats_score,
+            content_score
+        )
 
         # Create analysis record
         analysis = Analysis(
@@ -92,10 +122,15 @@ async def analyze_resume(request: AnalyzeRequest):
         # Store analysis
         analyses_db[str(analysis.id)] = analysis
 
+        logger.info(f"Analysis completed for {request.resume_id}: "
+                   f"overall={overall_score:.1f}, grammar={grammar_score:.1f}, "
+                   f"ats={ats_score:.1f}, content={content_score:.1f}")
+
         return analysis
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        logger.exception(f"Analysis failed for {request.resume_id}")
+        raise HTTPException(status_code=500, detail="Analysis failed. Please try again.")
 
 
 @router.get("/{analysis_id}", response_model=Analysis)
@@ -109,7 +144,10 @@ async def get_analysis(analysis_id: str):
     Returns:
         Analysis results
     """
+    logger.info(f"Retrieving analysis: {analysis_id}")
+
     if analysis_id not in analyses_db:
+        logger.error(f"Analysis not found: {analysis_id}")
         raise HTTPException(status_code=404, detail="Analysis not found")
 
     return analyses_db[analysis_id]
@@ -126,9 +164,18 @@ async def check_grammar(request: GrammarCheckRequest):
     Returns:
         List of grammar issues
     """
-    grammar_checker = GrammarChecker()
-    issues = await grammar_checker.check_grammar(request.text)
-    return issues
+    logger.info(f"Grammar check requested for {len(request.text)} characters")
+
+    try:
+        grammar_checker = GrammarChecker()
+        issues = await grammar_checker.check_grammar(request.text)
+
+        logger.info(f"Grammar check found {len(issues)} issues")
+        return issues
+
+    except Exception as e:
+        logger.exception("Grammar check failed")
+        raise HTTPException(status_code=500, detail="Grammar check failed")
 
 
 @router.post("/ats", response_model=dict)
@@ -142,19 +189,29 @@ async def check_ats(request: ATSCheckRequest):
     Returns:
         ATS score and suggestions
     """
+    logger.info(f"ATS check requested for resume: {request.resume_id}")
+
     from app.routers.upload import uploads_db
 
     if request.resume_id not in uploads_db:
+        logger.error(f"Resume not found: {request.resume_id}")
         raise HTTPException(status_code=404, detail="Resume not found")
 
     resume = uploads_db[request.resume_id]
 
     if not resume.content:
+        logger.error(f"Resume content not parsed: {request.resume_id}")
         raise HTTPException(status_code=400, detail="Resume content not parsed")
 
-    ats_optimizer = ATSOptimizer()
-    score, suggestions = await ats_optimizer.analyze_ats_compatibility(
-        resume.content, request.job_description
-    )
+    try:
+        ats_optimizer = ATSOptimizer()
+        score, suggestions = await ats_optimizer.analyze_ats_compatibility(
+            resume.content, request.job_description
+        )
 
-    return {"score": score, "suggestions": suggestions}
+        logger.info(f"ATS check completed: score={score}, suggestions={len(suggestions)}")
+        return {"score": score, "suggestions": suggestions}
+
+    except Exception as e:
+        logger.exception("ATS check failed")
+        raise HTTPException(status_code=500, detail="ATS check failed")
