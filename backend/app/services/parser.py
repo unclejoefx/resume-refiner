@@ -289,7 +289,8 @@ class DocumentParser:
         try:
             for header in ParserConfig.SECTION_HEADERS['summary']:
                 # Simplified pattern to reduce ReDoS risk
-                pattern = rf'(?:^|\n)({re.escape(header)})\s*[:\-]?\s*\n'
+                # Allow optional whitespace after newline to handle indented text
+                pattern = rf'(?:^|\n)\s*({re.escape(header)})\s*[:\-]?\s*\n'
 
                 try:
                     # Use regex library with timeout
@@ -307,7 +308,8 @@ class DocumentParser:
                         next_section = len(text)
                         for section_headers in ParserConfig.SECTION_HEADERS.values():
                             for next_header in section_headers:
-                                next_pattern = rf'\n{re.escape(next_header)}\s*[:\-]?\s*\n'
+                                # Allow optional whitespace before header
+                                next_pattern = rf'\n\s*{re.escape(next_header)}\s*[:\-]?\s*\n'
                                 try:
                                     next_match = regex.search(
                                         next_pattern,

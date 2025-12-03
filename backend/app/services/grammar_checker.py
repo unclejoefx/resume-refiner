@@ -74,12 +74,18 @@ class GrammarChecker:
                 # Extract suggestions (limit to top 3)
                 suggestions = match.replacements[:3] if match.replacements else []
 
+                # Calculate line number from offset
+                line_number = None
+                if match.offset is not None:
+                    # Count newlines up to the offset position
+                    line_number = text[:match.offset].count('\n') + 1
+
                 issue = GrammarIssue(
                     text=match.context,
                     message=match.message,
                     suggestions=suggestions,
                     category=match.category,
-                    line=match.sentence,
+                    line=line_number,
                     offset=match.offset
                 )
                 issues.append(issue)

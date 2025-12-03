@@ -27,7 +27,43 @@ Document parsing functionality has been implemented:
 - DocumentPreview component for displaying parsed content
 - Comprehensive test suite for parser functionality
 
-**Next Steps**: Phase 3 - Grammar and Basic Analysis (implement grammar checking and scoring)
+**Phase 2 Security Hardening - COMPLETED ✅**
+
+Critical security fixes applied:
+- ReDoS protection with regex timeout
+- Specific exception handling with logging
+- Input validation and sanitization
+- Configuration management (ParserConfig)
+- File cleanup background task
+- Comprehensive logging infrastructure
+
+**Phase 3 (Grammar and Basic Analysis) - COMPLETED ✅**
+
+Grammar checking and scoring functionality implemented:
+- LanguageTool integration for grammar checking
+- Singleton pattern for performance optimization
+- Resume scoring algorithm with weighted factors
+- Grammar score based on issue count
+- Content score based on resume completeness
+- ATS score based on compatibility
+- Overall weighted score calculation
+- Comprehensive test suite for grammar and scoring
+
+**Phase 4 (Claude API Integration) - COMPLETED ✅**
+
+AI-powered content suggestions implemented:
+- Anthropic Claude API integration using AsyncAnthropic client
+- Intelligent prompt engineering for structured JSON responses
+- Content analysis for summary, experience, and skills sections
+- Direct improvement methods for summaries and bullet points
+- Graceful degradation when API key is not configured
+- Comprehensive error handling (rate limits, timeouts, API errors)
+- Input validation and truncation for cost control
+- 21 comprehensive tests with full mock coverage
+- Fixed .env configuration parsing for CSV values
+- Frontend already displays AI suggestions
+
+**Next Steps**: Phase 5 - ATS Optimization (detailed implementation)
 
 ## Development Commands
 
@@ -91,9 +127,32 @@ npm run lint
 - **Contact Extraction**: Regex-based extraction of emails, phone numbers, LinkedIn URLs
 - **Smart Parsing**: Attempts to structure unstructured text into meaningful sections
 
+### Claude AI Service Features
+- **Smart Analysis**: Analyzes summary, experience bullets, and skills sections
+- **Structured Prompts**: Enforces JSON responses for reliable parsing
+- **Best Practices**: Promotes action verbs, metrics, and impact-focused content
+- **Graceful Fallback**: Works without API key (returns empty suggestions)
+- **Cost Control**: Input truncation and limits prevent excessive API usage
+- **Error Resilience**: Handles rate limits, timeouts, and malformed responses
+
 ### API Flow
 1. User uploads resume → POST /api/upload/
 2. Backend parses document → Returns upload object with parsed content
 3. Frontend requests analysis → POST /api/analyze/
-4. Backend runs grammar check, ATS analysis, AI suggestions → Returns analysis results
-5. User views results and can export → GET /api/export/{id}/pdf or /docx
+4. Backend runs:
+   - Grammar check (LanguageTool)
+   - ATS compatibility analysis
+   - **Claude AI content suggestions** (if API key configured)
+   - Scoring calculation (weighted: Grammar 30%, ATS 35%, Content 35%)
+5. Returns comprehensive analysis with AI-powered suggestions
+6. User views results and can export → GET /api/export/{id}/pdf or /docx
+
+### Configuration
+To enable Claude AI suggestions, add your API key to `.env`:
+```bash
+CLAUDE_API_KEY=your_api_key_here
+```
+
+Get your API key from: https://console.anthropic.com/
+
+Without the API key, the application works normally but content suggestions will be empty.
